@@ -3,17 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Home - Fixed UI State</title>
+    <title>Smart Home - Monitor System</title>
     <!-- 引入 MQTT.js -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
     <style>
         /* 页面背景 */
         body { margin: 0; overflow: hidden; background-color: #dcdde1; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-        
-        /* 强制 Canvas 填满容器 */
         canvas { display: block; width: 100%; height: 100%; }
 
-        /* --- 侧边栏样式 --- */
+        /* --- 侧边栏 --- */
         .sidebar {
             position: fixed; top: 0; left: 0; width: 280px; height: 100%;
             background: rgba(255, 255, 255, 0.2); 
@@ -29,188 +28,112 @@
             transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
             will-change: transform;
         }
-        
         .sidebar.active { transform: translateX(0); }
 
-        .sb-section h3 { 
-            font-size: 12px; text-transform: uppercase; letter-spacing: 2px; 
-            color: #7f8fa6; margin-bottom: 15px; font-weight: 700; text-shadow: 0 1px 0 rgba(255,255,255,0.5);
-        }
-        
+        .sb-section h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: #7f8fa6; margin-bottom: 15px; font-weight: 700; text-shadow: 0 1px 0 rgba(255,255,255,0.5); }
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .stat-card { 
-            background: rgba(255,255,255,0.3); 
-            border-radius: 12px; padding: 15px; text-align: center; 
-            border: 1px solid rgba(255,255,255,0.4); 
-            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
-        }
-        .stat-value { font-size: 24px; font-weight: 600; color: #505050; display: block; }
+        .stat-card { background: rgba(255,255,255,0.3); border-radius: 12px; padding: 15px; text-align: center; border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 2px 5px rgba(0,0,0,0.02); transition: all 0.3s;}
+        .stat-card.full-width { grid-column: span 2; padding: 12px; }
+        .stat-value { font-size: 24px; font-weight: 600; color: #505050; display: block; transition: color 0.3s; }
         .stat-label { font-size: 11px; color: #666; margin-top: 5px; display: block; }
         
         .room-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
-        .room-item { 
-            padding: 12px 16px; border-radius: 8px; 
-            background: rgba(255,255,255,0.1); 
-            color: #505050; font-size: 14px; font-weight: 500; 
-            cursor: pointer; transition: all 0.2s; 
-            display: flex; justify-content: space-between; align-items: center;
-            border: 1px solid rgba(255,255,255,0.2);
-        }
-        .room-item:hover { 
-            background: rgba(255,255,255,0.5); 
-            transform: translateX(3px); 
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
+        .room-item { padding: 12px 16px; border-radius: 8px; background: rgba(255,255,255,0.1); color: #505050; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255,255,255,0.2); }
+        .room-item:hover { background: rgba(255,255,255,0.5); transform: translateX(3px); box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
         .room-item.selected { background: rgba(255,255,255,0.8); border-color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
         .room-icon { opacity: 0.5; font-size: 12px; }
 
-        /* --- 灯光控制二级面板 --- */
+        /* --- 灯光控制面板 --- */
         .controls-panel {
-            position: fixed; top: 120px; left: 290px;
-            width: 240px; 
-            background: rgba(255, 255, 255, 0.4);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-            z-index: 90;
-            opacity: 0;
-            transform: translateX(-20px) scale(0.95);
-            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-            pointer-events: none;
+            position: fixed; top: 120px; left: 290px; width: 240px; 
+            background: rgba(255, 255, 255, 0.4); backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 16px; padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05); z-index: 90;
+            opacity: 0; transform: translateX(-20px) scale(0.95);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); pointer-events: none;
         }
-
-        .controls-panel.active {
-            opacity: 1;
-            transform: translateX(0) scale(1);
-            pointer-events: auto;
-        }
+        .controls-panel.active { opacity: 1; transform: translateX(0) scale(1); pointer-events: auto; }
 
         .cp-header { margin-bottom: 20px; border-bottom: 1px solid rgba(0,0,0,0.05); padding-bottom: 10px; }
         .cp-title { margin: 0; font-size: 16px; font-weight: 600; color: #333; }
         .cp-subtitle { margin: 0; font-size: 12px; color: #777; margin-top: 4px; }
 
-        /* 控制行样式：整行点击 */
-        .control-row { 
-            display: flex; justify-content: space-between; align-items: center; 
-            margin-bottom: 10px; padding: 12px;
-            background: rgba(255,255,255,0.3);
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.2s;
-            border: 1px solid transparent;
-        }
+        .control-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 12px; background: rgba(255,255,255,0.3); border-radius: 10px; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
         .control-row:hover { background: rgba(255,255,255,0.6); }
-        
-        /* 激活状态样式 */
-        .control-row.active-state { 
-            background: #fff; 
-            border-color: rgba(76, 217, 100, 0.5);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-        }
+        .control-row.active-state { background: #fff; border-color: rgba(76, 217, 100, 0.5); box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
         .control-row.active-state .control-label { color: #4cd964; }
         .control-row.active-state .status-text { color: #4cd964; font-weight: bold; }
-
         .control-label { font-size: 14px; color: #555; font-weight: 500; display: flex; align-items: center; gap: 8px; }
         
-        /* 图标 */
         .icon-light::before { content: "💡"; font-size: 16px; }
-
-        /* 隐藏原有的 Switch 开关 */
+        .icon-ac::before { content: "❄️"; font-size: 16px; }
+        .icon-fan::before { content: "🌀"; font-size: 16px; }
         .switch { display: none; }
         .status-text { font-size: 12px; color: #999; text-transform: uppercase; font-weight: 600; letter-spacing: 1px; }
 
-        /* --- 主内容容器 --- */
-        #main-wrapper {
-            position: relative; width: 100%; height: 100vh; margin-left: 0;
-            background-color: #dcdde1; 
-            transition: margin-left 0.6s cubic-bezier(0.16, 1, 0.3, 1), width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-            will-change: margin-left, width; overflow: hidden;
-        }
+        /* --- 容器 --- */
+        #main-wrapper { position: relative; width: 100%; height: 100vh; margin-left: 0; background-color: #dcdde1; transition: margin-left 0.6s cubic-bezier(0.16, 1, 0.3, 1), width 0.6s cubic-bezier(0.16, 1, 0.3, 1); will-change: margin-left, width; overflow: hidden; }
         body.sidebar-open #main-wrapper { margin-left: 280px; width: calc(100% - 280px); }
 
         /* --- UI 控件 --- */
-        .menu-btn {
-            position: absolute; top: 30px; left: 30px; z-index: 95;
-            width: 42px; height: 42px; border-radius: 12px;
-            background: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.5); backdrop-filter: blur(8px);
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-            transition: all 0.3s ease; color: #505050; font-size: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-        }
+        .menu-btn { position: absolute; top: 30px; left: 30px; z-index: 95; width: 42px; height: 42px; border-radius: 12px; background: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.5); backdrop-filter: blur(8px); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; color: #505050; font-size: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
         .menu-btn:hover { background: rgba(255,255,255,0.8); transform: scale(1.05); }
-
         .theme-controls { position: absolute; top: 30px; right: 30px; display: flex; gap: 12px; z-index: 10; }
         .theme-btn { width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); backdrop-filter: blur(8px); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
         .theme-btn:hover { transform: translateY(-2px); background: rgba(255,255,255,0.5); }
         .theme-btn.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.6); transform: scale(1.1); }
         .color-dot { width: 18px; height: 18px; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-
         .view-controls { position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.7); padding: 5px 6px; border-radius: 50px; display: flex; gap: 5px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); backdrop-filter: blur(10px); z-index: 10; border: 1px solid rgba(255,255,255,0.4); }
         .view-btn { background: transparent; border: none; color: #718093; padding: 12px 32px; border-radius: 40px; cursor: pointer; font-size: 13px; font-weight: 600; letter-spacing: 1.5px; transition: all 0.4s ease; }
         .view-btn.active { background: #718093; color: #fff; box-shadow: 0 4px 12px rgba(113, 128, 147, 0.3); }
-        
-        .tip { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); color: #505050; background: rgba(255,255,255,0.7); padding: 10px 24px; border-radius: 30px; font-size: 13px; font-weight: 500; backdrop-filter: blur(10px); pointer-events: none; box-shadow: 0 8px 20px rgba(0,0,0,0.05); transition: all 0.3s ease; z-index: 5; min-width: 240px; text-align: center; }
-        
-        #mqtt-status { position: fixed; bottom: 10px; right: 10px; font-size: 10px; color: #aaa; z-index: 200; pointer-events: none; }
+        .tip { position: absolute; top: 30px; left: 50%; transform: translateX(-50%) translateY(-10px); color: #505050; background: rgba(255,255,255,0.85); padding: 8px 24px; border-radius: 30px; font-size: 13px; font-weight: 600; backdrop-filter: blur(10px); pointer-events: none; box-shadow: 0 8px 20px rgba(0,0,0,0.08); z-index: 5; min-width: 180px; text-align: center; opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease; }
+        .tip.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #mqtt-status { position: fixed; bottom: 10px; right: 10px; font-size: 10px; color: #aaa; z-index: 200; pointer-events: none; transition: color 0.3s; }
+        #mqtt-status.connected { color: #4cd964; }
     </style>
 </head>
 <body>
 
-    <!-- 侧边栏 -->
     <div class="sidebar" id="sidebar">
         <div class="sb-section">
             <h3>Environment</h3>
             <div class="stats-grid">
-                <div class="stat-card"><span class="stat-value" id="val-temp">--</span><span class="stat-label">Temp (°C)</span></div>
-                <div class="stat-card"><span class="stat-value" id="val-humi">--</span><span class="stat-label">Humidity (%)</span></div>
+                <div class="stat-card"><span class="stat-value" id="val-temp">26.0°</span><span class="stat-label">Temp</span></div>
+                <div class="stat-card"><span class="stat-value" id="val-humi">60.0%</span><span class="stat-label">Humidity</span></div>
+                <div class="stat-card full-width"><span class="stat-value" id="val-smoke" style="color: #4cd964; font-size: 18px;">安全</span><span class="stat-label">Smoke Status</span></div>
             </div>
         </div>
         <div class="sb-section">
             <h3>Quick Navigation</h3>
-            <ul class="room-list" id="room-list-ul">
-                <!-- JS动态生成 -->
-            </ul>
+            <ul class="room-list" id="room-list-ul"></ul>
         </div>
     </div>
 
-    <!-- 灯光控制面板 -->
     <div class="controls-panel" id="controls-panel">
         <div class="cp-header">
             <h4 class="cp-title" id="cp-room-name">Living Room</h4>
             <p class="cp-subtitle">Room Controls</p>
         </div>
-        <!-- 灯光行 -->
-        <div class="control-row" id="cp-light-row">
-            <span class="control-label icon-light">Ceiling Light</span>
-            <span class="status-text" id="cp-light-status">OFF</span>
-        </div>
+        <div id="cp-dynamic-rows"></div>
     </div>
 
-    <!-- 主内容 -->
     <div id="main-wrapper">
         <div class="menu-btn" id="menu-btn">☰</div>
         <div class="theme-controls">
-            <!-- [修改] 给 theme-dawn 加上 active 类 -->
-            <div class="theme-btn" id="theme-night" title="静谧 (Night)"><div class="color-dot" style="background: linear-gradient(135deg, #2f3640, #353b48);"></div></div>
-            <div class="theme-btn" id="theme-dawn" title="微茫 (Dawn)"><div class="color-dot" style="background: linear-gradient(135deg, #718093, #7f8fa6);"></div></div>
-            <div class="theme-btn" id="theme-dusk" title="余晖 (Dusk)"><div class="color-dot" style="background: linear-gradient(135deg, #ba9e95, #d1ccc0);"></div></div>
+            <div class="theme-btn" id="theme-night"><div class="color-dot" style="background: linear-gradient(135deg, #2f3640, #353b48);"></div></div>
+            <div class="theme-btn active" id="theme-dawn"><div class="color-dot" style="background: linear-gradient(135deg, #718093, #7f8fa6);"></div></div>
+            <div class="theme-btn" id="theme-dusk"><div class="color-dot" style="background: linear-gradient(135deg, #ba9e95, #d1ccc0);"></div></div>
         </div>
-        <div class="tip" id="status-tip">正在连接云端...</div>
+        <div class="tip" id="status-tip"></div>
         <div class="view-controls">
             <button class="view-btn" id="btn-2d">2D VIEW</button>
             <button class="view-btn active" id="btn-3d">3D VIEW</button>
         </div>
-        <div id="mqtt-status">MQTT: Disconnected</div>
+        <div id="mqtt-status">MQTT: Initializing...</div>
     </div>
 
     <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
-        }
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 
@@ -218,191 +141,237 @@
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-        // --- MQTT Config ---
-        const MQTT_CONFIG = {
-            host: 'wss://iot-06z00jbvofuz12n.mqtt.iothub.aliyuncs.com:443/mqtt',
-            options: {
-                clientId: 'hbqr9g5E5SA.Controller|securemode=2,signmethod=hmacsha256,timestamp=1765421639149|',
-                username: 'Controller&hbqr9g5E5SA',
-                password: 'd5dcc10240bd55af6b55122c0645e5c1ac2b1c882d826c89f95acb470b941905',
-                keepalive: 60,
-                clean: true
-            },
+  
+        const IOT_CONFIG = {
+            productKey: "hbqr9g5E5SA",
+            deviceName: "Monitor",
+            // 浏览器环境必须使用 WSS (443端口)
+            host: "wss://iot-06z00jbvofuz12n.mqtt.iothub.aliyuncs.com:443/mqtt",
+            // 静态参数
+            clientId: "hbqr9g5E5SA.Monitor|securemode=2,signmethod=hmacsha256,timestamp=1774954171490|",
+            username: "Monitor&hbqr9g5E5SA",
+            password: "3d71a698d1742216856484880ba176c80599edcd835a85c4ba842dca0fb0ae99",
+            
             topics: {
-                post: `/sys/hbqr9g5E5SA/Controller/thing/event/property/post`,
-                set: `/sys/hbqr9g5E5SA/Controller/thing/service/property/set`
+                post: `/sys/hbqr9g5E5SA/Monitor/thing/event/property/post`, 
+                set: `/sys/hbqr9g5E5SA/Monitor/thing/service/property/set`,  
+                syncPub: `/hbqr9g5E5SA/Monitor/user/update`,                  
+                syncSub: `/hbqr9g5E5SA/Monitor/user/get`,                     
+                get: `/sys/hbqr9g5E5SA/Monitor/thing/property/get`,           
+                getReply: `/sys/hbqr9g5E5SA/Monitor/thing/property/get_reply` 
             }
         };
 
-        const ROOM_PROP_MAP = {
-            'Living_Room': 'LivingRoomLight',
-            'Bedroom_Bottom_Left': 'MasterRoomLight',
-            'Bedroom_Top_Left': 'GuestRoomLight1', 
-            'Bedroom_Top_Right': 'GuestRoomLight2', 
-            'Entrance': 'EntranceLiight'
+        const DEVICE_PROP_MAP = {
+            'Living_Room': { lamp: 'LivingRoomLight', ac: 'LivingRoomAC', fan: 'LivingRoomFan' },
+            'Bedroom_Bottom_Left': { lamp: 'MasterRoomLight', ac: 'MasterRoomAC' },
+            'Bedroom_Top_Left': { lamp: 'GuestRoomLight1', ac: 'GuestRoomAC1' },
+            'Bedroom_Top_Right': { lamp: 'GuestRoomLight2', ac: 'GuestRoomAC2' },
+            'Entrance': { lamp: 'EntranceLiight' }
         };
 
         // --- 全局变量 ---
-        const interactables = [];
+        const interactables =[];
+        const roomZones =[];
         let activeRoomId = null;  
         let currentFocusedRoom = null; 
         let hoveredObject = null;
-        let pointerDownX = 0;
-        let pointerDownY = 0;
+        let pointerDownX = 0; let pointerDownY = 0;
         let mqttClient = null;
+        let fetchInterval = null; 
 
-        // --- UI Logic ---
-        const sidebar = document.getElementById('sidebar');
-        const menuBtn = document.getElementById('menu-btn');
-        const mainWrapper = document.getElementById('main-wrapper');
-        const statusTip = document.getElementById('status-tip');
-        const mqttStatusDiv = document.getElementById('mqtt-status');
-        
-        const controlsPanel = document.getElementById('controls-panel');
-        const cpTitle = document.getElementById('cp-room-name');
-        const cpLightRow = document.getElementById('cp-light-row');
-        const cpLightStatus = document.getElementById('cp-light-status');
-        const valTemp = document.getElementById('val-temp');
-        const valHumi = document.getElementById('val-humi');
+        // --- 动态生成柔和风粒子贴图 ---
+        function createWindTexture() {
+            const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const grd = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            grd.addColorStop(0, 'rgba(255, 255, 255, 1)'); grd.addColorStop(0.2, 'rgba(255, 255, 255, 0.6)');
+            grd.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)'); grd.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = grd; ctx.fillRect(0, 0, 64, 64);
+            return new THREE.CanvasTexture(canvas);
+        }
+        const windTexture = createWindTexture();
+
+        // --- UI 操作 ---
+        const ui = {
+            sidebar: document.getElementById('sidebar'),
+            menuBtn: document.getElementById('menu-btn'),
+            mainWrapper: document.getElementById('main-wrapper'),
+            statusTip: document.getElementById('status-tip'),
+            mqttStatusDiv: document.getElementById('mqtt-status'),
+            controlsPanel: document.getElementById('controls-panel'),
+            cpTitle: document.getElementById('cp-room-name'),
+            cpDynamicRows: document.getElementById('cp-dynamic-rows'),
+            valTemp: document.getElementById('val-temp'),
+            valHumi: document.getElementById('val-humi'),
+            valSmoke: document.getElementById('val-smoke'),
+            roomListUl: document.getElementById('room-list-ul')
+        };
 
         function updateTip(text) { 
-            if (text && text.length > 0) {
-                statusTip.innerText = text;
-                statusTip.style.opacity = '1';
-                statusTip.style.transform = 'translate(-50%, 0)';
-            } else {
-                statusTip.style.opacity = '0';
-                statusTip.style.transform = 'translate(-50%, -10px)';
-            }
+            if (text && text.length > 0) { ui.statusTip.innerText = text; ui.statusTip.classList.add('visible'); } 
+            else { ui.statusTip.classList.remove('visible'); }
         }
-
-        // [新增] 绑定 UI 按钮的悬停提示
         function bindUITip(elementId, text) {
             const el = document.getElementById(elementId);
-            if (el) {
-                el.addEventListener('mouseenter', () => updateTip(text));
-                el.addEventListener('mouseleave', () => updateTip("")); 
-            }
+            if (el) { el.addEventListener('mouseenter', () => updateTip(text)); el.addEventListener('mouseleave', () => updateTip("")); }
         }
+        bindUITip('theme-night', '切换环境：深夜'); bindUITip('theme-dawn', '切换环境：清晨'); bindUITip('theme-dusk', '切换环境：黄昏');
+        bindUITip('btn-2d', '切换视图：2D平面'); bindUITip('btn-3d', '切换视图：3D立体'); bindUITip('menu-btn', '展开/收起侧边栏');
 
-        bindUITip('theme-night', '切换环境：深夜');
-        bindUITip('theme-dawn', '切换环境：清晨');
-        bindUITip('theme-dusk', '切换环境：黄昏');
-        bindUITip('btn-2d', '切换视图：2D平面');
-        bindUITip('btn-3d', '切换视图：3D立体');
-        bindUITip('menu-btn', '展开/收起侧边栏');
+        function resetSensorUI() {
+            if (ui.valTemp) ui.valTemp.innerText = "26.0°";
+            if (ui.valHumi) ui.valHumi.innerText = "60.0%";
+            if (ui.valSmoke) {
+                ui.valSmoke.innerText = "安全";
+                ui.valSmoke.style.color = "#4cd964";
+            }
+            ui.mqttStatusDiv.classList.remove('connected');
+        }
 
         function toggleSidebar() {
-            if (sidebar.classList.contains('active')) {
-                sidebar.classList.remove('active');
-                document.body.classList.remove('sidebar-open');
-                hideControlsPanel();
-            } else {
-                sidebar.classList.add('active');
-                document.body.classList.add('sidebar-open');
-            }
+            if (ui.sidebar.classList.contains('active')) { ui.sidebar.classList.remove('active'); document.body.classList.remove('sidebar-open'); hideControlsPanel(); } 
+            else { ui.sidebar.classList.add('active'); document.body.classList.add('sidebar-open'); }
         }
-        menuBtn.addEventListener('click', toggleSidebar);
+        ui.menuBtn.addEventListener('click', toggleSidebar);
 
         function updatePanelUI(roomId) {
-            const lampMesh = interactables.find(obj => obj.userData.type === 'lamp' && obj.userData.roomId === roomId);
-            if (lampMesh) {
-                cpLightRow.style.display = 'flex';
-                if (lampMesh.userData.isOn) {
-                    cpLightRow.classList.add('active-state');
-                    cpLightStatus.innerText = 'ON';
-                } else {
-                    cpLightRow.classList.remove('active-state');
-                    cpLightStatus.innerText = 'OFF';
-                }
-            } else {
-                cpLightRow.style.display = 'none';
-            }
-        }
+            ui.cpDynamicRows.innerHTML = ''; 
+            const devicesInRoom = interactables.filter(obj => obj.userData.roomId === roomId);
+            const typeInfo = {
+                'lamp': { icon: 'icon-light', label: 'Ceiling Light' },
+                'ac': { icon: 'icon-ac', label: 'Air Conditioner' },
+                'fan': { icon: 'icon-fan', label: 'Exhaust Fan' }
+            };
 
-        function showControlsPanel(roomId, roomDisplayName) {
-            if (!sidebar.classList.contains('active')) return;
-            cpTitle.innerText = roomDisplayName;
-            activeRoomId = roomId;
-            updatePanelUI(roomId);
-            controlsPanel.classList.add('active');
-            document.querySelectorAll('.room-item').forEach(el => {
-                if(el.dataset.room === roomId) el.classList.add('selected');
-                else el.classList.remove('selected');
+            ['lamp', 'ac', 'fan'].forEach(type => {
+                const mesh = devicesInRoom.find(obj => obj.userData.type === type);
+                if (mesh) {
+                    const row = document.createElement('div');
+                    row.className = `control-row ${mesh.userData.isOn ? 'active-state' : ''}`;
+                    row.innerHTML = `<span class="control-label ${typeInfo[type].icon}">${typeInfo[type].label}</span><span class="status-text">${mesh.userData.isOn ? 'ON' : 'OFF'}</span>`;
+                    row.addEventListener('click', () => toggleDeviceState(mesh, null, true));
+                    ui.cpDynamicRows.appendChild(row);
+                }
             });
         }
 
-        function hideControlsPanel() {
-            controlsPanel.classList.remove('active');
-            document.querySelectorAll('.room-item').forEach(el => el.classList.remove('selected'));
-            activeRoomId = null;
+        function showControlsPanel(roomId, roomDisplayName) {
+            if (!ui.sidebar.classList.contains('active')) return;
+            ui.cpTitle.innerText = roomDisplayName; activeRoomId = roomId; 
+            updatePanelUI(roomId); ui.controlsPanel.classList.add('active');
+            document.querySelectorAll('.room-item').forEach(el => { if(el.dataset.room === roomId) el.classList.add('selected'); else el.classList.remove('selected'); });
         }
-
-        cpLightRow.addEventListener('click', () => {
-            if (!activeRoomId) return;
-            const lampMesh = interactables.find(obj => obj.userData.type === 'lamp' && obj.userData.roomId === activeRoomId);
-            if (lampMesh) toggleLampState(lampMesh, null, true);
-        });
+        function hideControlsPanel() { ui.controlsPanel.classList.remove('active'); document.querySelectorAll('.room-item').forEach(el => el.classList.remove('selected')); activeRoomId = null; }
 
         // --- MQTT Logic ---
         function initMQTT() {
-            console.log('Connecting to Aliyun IoT...');
             try {
-                mqttClient = mqtt.connect(MQTT_CONFIG.host, MQTT_CONFIG.options);
+                const options = { 
+                    clientId: IOT_CONFIG.clientId, 
+                    username: IOT_CONFIG.username, 
+                    password: IOT_CONFIG.password, 
+                    keepalive: 60, 
+                    clean: true 
+                };
+                
+                mqttClient = mqtt.connect(IOT_CONFIG.host, options);
 
                 mqttClient.on('connect', () => {
-                    console.log('MQTT Connected');
-                    mqttStatusDiv.innerText = 'MQTT: Connected';
-                    updateTip("云端已连接，可进行控制");
+                    ui.mqttStatusDiv.innerText = 'MQTT: Connected'; 
+                    ui.mqttStatusDiv.classList.add('connected');
+                    updateTip("云端已连接 (Monitor)");
                     
-                    mqttClient.subscribe(MQTT_CONFIG.topics.set, (err) => {
-                        if (!err) console.log('Subscribed to:', MQTT_CONFIG.topics.set);
+                    mqttClient.subscribe([IOT_CONFIG.topics.set, IOT_CONFIG.topics.syncSub, IOT_CONFIG.topics.getReply], (err) => {
+                        if (!err) console.log('Subscribed to topics');
                     });
+
+                    requestCloudData();
+
+                    if (fetchInterval) clearInterval(fetchInterval);
+                    fetchInterval = setInterval(requestCloudData, 5000);
                 });
 
                 mqttClient.on('message', (topic, message) => {
-                    if (topic === MQTT_CONFIG.topics.set) {
-                        const payload = JSON.parse(message.toString());
-                        console.log('Received:', payload);
-                        handleCloudCommand(payload.params);
+                    const payload = JSON.parse(message.toString());
+                    
+                    if (topic === IOT_CONFIG.topics.getReply) {
+                        if (payload.code === 200 && payload.data) {
+                            const parsedParams = {};
+                            for(const key in payload.data) {
+                                parsedParams[key] = typeof payload.data[key] === 'object' ? payload.data[key].value : payload.data[key];
+                            }
+                            handleCloudCommand(parsedParams);
+                        }
+                    } else if (payload.params) { 
+                        handleCloudCommand(payload.params); 
+                    } else { 
+                        handleCloudCommand(payload); 
                     }
                 });
 
-                mqttClient.on('error', (err) => {
-                    console.error('MQTT Error:', err);
-                    mqttStatusDiv.innerText = 'MQTT: Error';
+                mqttClient.on('close', () => { 
+                    if (fetchInterval) clearInterval(fetchInterval); 
+                    resetSensorUI();
+                    ui.mqttStatusDiv.innerText = 'MQTT: Disconnected'; 
                 });
-            } catch (e) {
-                console.error("MQTT Init Failed", e);
+                mqttClient.on('error', (err) => { 
+                    resetSensorUI();
+                    ui.mqttStatusDiv.innerText = 'MQTT: Error'; 
+                });
+            } catch (e) { console.error("MQTT Init Failed", e); }
+        }
+
+        function requestCloudData() {
+            if (mqttClient && mqttClient.connected) {
+                const keysToFetch = ["temperature", "Humidity", "SmokeStatus"];
+                for (const rId in DEVICE_PROP_MAP) {
+                    for (const type in DEVICE_PROP_MAP[rId]) {
+                        keysToFetch.push(DEVICE_PROP_MAP[rId][type]);
+                    }
+                }
+                const getPayload = {
+                    id: Date.now().toString(),
+                    version: "1.0",
+                    params: keysToFetch,
+                    method: "thing.property.get"
+                };
+                mqttClient.publish(IOT_CONFIG.topics.get, JSON.stringify(getPayload));
             }
         }
 
         function handleCloudCommand(params) {
             for (const key in params) {
-                const roomId = Object.keys(ROOM_PROP_MAP).find(rId => ROOM_PROP_MAP[rId] === key);
-                if (roomId) {
-                    const lamp = interactables.find(obj => obj.userData.type === 'lamp' && obj.userData.roomId === roomId);
-                    if (lamp) {
-                        const targetState = params[key] === 1; 
-                        if (lamp.userData.isOn !== targetState) {
-                            toggleLampState(lamp, targetState, false); 
+                for (const rId in DEVICE_PROP_MAP) {
+                    for (const type in DEVICE_PROP_MAP[rId]) {
+                        if (DEVICE_PROP_MAP[rId][type] === key) {
+                            const device = interactables.find(obj => obj.userData.type === type && obj.userData.roomId === rId);
+                            if (device) {
+                                const targetState = params[key] === 1 || params[key] === true;
+                                if (device.userData.isOn !== targetState) {
+                                    toggleDeviceState(device, targetState, false);
+                                }
+                            }
                         }
                     }
                 }
             }
-            if (params.temperature !== undefined) valTemp.innerText = params.temperature.toFixed(1) + "°";
-            if (params.Humidity !== undefined) valHumi.innerText = params.Humidity.toFixed(1) + "%";
+            
+            if (params.temperature !== undefined) ui.valTemp.innerText = parseFloat(params.temperature).toFixed(1) + "°";
+            if (params.Humidity !== undefined) ui.valHumi.innerText = parseFloat(params.Humidity).toFixed(1) + "%";
+            if (params.SmokeStatus !== undefined) {
+                const smokeMap = { 0: { text: "安全", color: "#4cd964" }, 1: { text: "超标", color: "#ff9800" }, 2: { text: "危险", color: "#ff3b30" } };
+                const status = smokeMap[params.SmokeStatus] || smokeMap[0];
+                ui.valSmoke.innerText = status.text;
+                ui.valSmoke.style.color = status.color;
+            }
         }
 
         function publishProperty(props) {
             if (!mqttClient || !mqttClient.connected) return;
-            const payload = {
-                id: Date.now().toString(),
-                version: "1.0",
-                params: props,
-                method: "thing.event.property.post"
-            };
-            mqttClient.publish(MQTT_CONFIG.topics.post, JSON.stringify(payload));
+            const postPayload = { id: Date.now().toString(), version: "1.0", params: props, method: "thing.event.property.post" };
+            mqttClient.publish(IOT_CONFIG.topics.post, JSON.stringify(postPayload));
+            mqttClient.publish(IOT_CONFIG.topics.syncPub, JSON.stringify(props));
         }
 
         // --- Three.js Setup ---
@@ -416,14 +385,13 @@
         scene.background = new THREE.Color(initialTheme.bg);
         scene.fog = new THREE.FogExp2(initialTheme.bg, initialTheme.fogDensity);
 
-        const camera = new THREE.PerspectiveCamera(35, mainWrapper.clientWidth / mainWrapper.clientHeight, 0.1, 200);
+        const camera = new THREE.PerspectiveCamera(35, ui.mainWrapper.clientWidth / ui.mainWrapper.clientHeight, 0.1, 200);
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-        renderer.setSize(mainWrapper.clientWidth, mainWrapper.clientHeight);
+        renderer.setSize(ui.mainWrapper.clientWidth, ui.mainWrapper.clientHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.shadowMap.enabled = false; 
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.25; 
-        mainWrapper.appendChild(renderer.domElement);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.25; 
+        ui.mainWrapper.appendChild(renderer.domElement);
 
         // --- Materials ---
         const glassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.1, roughness: 0.6, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
@@ -436,6 +404,9 @@
         const paleDoorMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d5, roughness: 0.6 }); 
         const matteGrayMat = new THREE.MeshStandardMaterial({ color: 0x505050, roughness: 0.9, metalness: 0.1 });
         const hitboxMat = new THREE.MeshBasicMaterial({ color: 0x4cd964, transparent: true, opacity: 0.0, side: THREE.DoubleSide, depthWrite: false });
+        const acMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.1 }); 
+        const acVentMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 }); 
+        const fanMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.2 });
 
         // --- House Construction ---
         const house = new THREE.Group();
@@ -444,7 +415,7 @@
         base.position.y = -0.1; house.add(base);
 
         function createWall(w, h, d, x, z) {
-            const y = h / 2; const geo = new THREE.BoxGeometry(w, h, d); const mesh = new THREE.Mesh(geo, glassMat); mesh.position.set(x, y, z); house.add(mesh);
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), glassMat); mesh.position.set(x, h/2, z); house.add(mesh);
         }
         const H = 2.6; const T = 0.2;
         createWall(18, H, T, 0, -6); createWall(8.3, H, T, -4.85, 6); createWall(8.3, H, T, 4.85, 6);
@@ -452,72 +423,61 @@
         createWall(7, H, T, -5.5, 0); createWall(7, H, T, 5.5, 1);  
         createWall(T, H, 1.8, -2, 5.1); createWall(T, H, 5.6, -2, 0); createWall(T, H, 1.8, -2, -5.1);
         createWall(T, H, 2.8, 2, 4.6); createWall(T, H, 0.8, 2, 1.4);
-
-        function createHeader(x, z, w, d) {
-            const gapGeo = new THREE.BoxGeometry(w, 0.3, d); const gapMesh = new THREE.Mesh(gapGeo, glassMat); gapMesh.position.set(x, 2.45, z); house.add(gapMesh);
-        }
+        function createHeader(x, z, w, d) { const gapMesh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.3, d), glassMat); gapMesh.position.set(x, 2.45, z); house.add(gapMesh); }
         createHeader(0, 6, 1.4, T); createHeader(-2, 3.5, T, 1.4); createHeader(-2, -3.5, T, 1.4); createHeader(2, 2.5, T, 1.4);    
 
-        const roomZones = []; 
-        const rooms = [
+        const ROOMS_CONFIG =[
             { name: 'Bedroom_Bottom_Left', label: 'Master Bedroom', x: -5.5, z: -3, w: 7, d: 6 },
             { name: 'Bedroom_Top_Left', label: 'Guest Room 1', x: -5.5, z: 3, w: 7, d: 6 },
             { name: 'Bedroom_Top_Right', label: 'Guest Room 2', x: 5.5, z: 3.5, w: 7, d: 5 },
             { name: 'Living_Room', label: 'Living Room', x: 5, z: -1.5, w: 7, d: 9 }, 
             { name: 'Entrance', label: 'Entrance', x: 0, z: 0, w: 4, d: 12 } 
         ];
-        rooms.forEach(room => {
-            const geo = new THREE.PlaneGeometry(room.w, room.d); const mesh = new THREE.Mesh(geo, hitboxMat);
+        ROOMS_CONFIG.forEach(room => {
+            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(room.w, room.d), hitboxMat.clone()); 
             mesh.rotation.x = -Math.PI / 2; mesh.position.set(room.x, 0.05, room.z);
             mesh.userData = { type: 'room', roomData: room }; house.add(mesh); roomZones.push(mesh);
-        });
-
-        // 侧边栏列表
-        const roomListUl = document.getElementById('room-list-ul');
-        roomListUl.innerHTML = '';
-        rooms.forEach(room => {
-            const li = document.createElement('li');
-            li.className = 'room-item';
-            li.dataset.room = room.name;
+            
+            const li = document.createElement('li'); li.className = 'room-item'; li.dataset.room = room.name;
             li.innerHTML = `<span>${room.label}</span> <span class="room-icon">→</span>`;
-            li.addEventListener('click', (e) => {
-                const targetRoom = rooms.find(r => r.name === room.name);
-                if(targetRoom) {
-                    if (currentMode !== '2d') {
-                        updateView('2d');
-                        setTimeout(() => zoomToRoom(targetRoom), 100);
-                    } else {
-                        zoomToRoom(targetRoom);
-                    }
-                    showControlsPanel(room.name, room.label);
-                }
+            li.addEventListener('click', () => {
+                if (currentMode !== '2d') { updateView('2d'); setTimeout(() => zoomToRoom(room), 100); } 
+                else { zoomToRoom(room); }
+                showControlsPanel(room.name, room.label);
             });
-            roomListUl.appendChild(li);
+            ui.roomListUl.appendChild(li);
         });
 
-        function toggleLampState(mesh, forceState = null, shouldPublish = true) {
+        function toggleDeviceState(mesh, forceState = null, shouldPublish = true) {
             const data = mesh.userData;
-            const light = data.lightRef;
-            const newState = (forceState !== null) ? forceState : !data.isOn;
-            data.isOn = newState;
+            data.isOn = (forceState !== null) ? forceState : !data.isOn;
 
-            if (data.isOn) {
-                gsap.to(mesh.material.emissive, { r: 1, g: 0.9, b: 0.7, duration: 0.4 });
-                gsap.to(light, { intensity: data.intensityMax, duration: 0.6, ease: "power2.out" });
-            } else {
-                gsap.to(mesh.material.emissive, { r: 0, g: 0, b: 0, duration: 0.4 });
-                gsap.to(light, { intensity: 0, duration: 0.4 });
+            if (data.type === 'lamp') {
+                if (data.isOn) {
+                    gsap.to(mesh.material.emissive, { r: 1, g: 0.9, b: 0.7, duration: 0.4 });
+                    gsap.to(data.lightRef, { intensity: data.intensityMax, duration: 0.6, ease: "power2.out" });
+                } else {
+                    gsap.to(mesh.material.emissive, { r: 0, g: 0, b: 0, duration: 0.4 });
+                    gsap.to(data.lightRef, { intensity: 0, duration: 0.4 });
+                }
+            } else if (data.type === 'ac') {
+                const vMesh = data.visualMesh || mesh;
+                if (data.isOn) { vMesh.material.emissive.setHex(0x00ffcc); data.windGroup.visible = true; } 
+                else { vMesh.material.emissive.setHex(0x000000); data.windGroup.visible = false; }
+            } else if (data.type === 'fan') {
+                const vMesh = data.visualMesh || mesh;
+                if (data.isOn) vMesh.material.emissive.setHex(0x333333); else vMesh.material.emissive.setHex(0x000000);
             }
+
             if (activeRoomId === data.roomId) updatePanelUI(activeRoomId);
 
-            if (shouldPublish && data.roomId && ROOM_PROP_MAP[data.roomId]) {
-                const propName = ROOM_PROP_MAP[data.roomId];
-                const props = {};
-                props[propName] = data.isOn ? 1 : 0;
+            if (shouldPublish && data.roomId && DEVICE_PROP_MAP[data.roomId] && DEVICE_PROP_MAP[data.roomId][data.type]) {
+                const props = {}; props[DEVICE_PROP_MAP[data.roomId][data.type]] = data.isOn ? 1 : 0;
                 publishProperty(props);
             }
         }
 
+        // --- 交互设备创建 ---
         function createInteractiveDoor(x, z, rotationY, mat, openDir = -1) {
             const group = new THREE.Group(); group.position.set(x, 0, z); group.rotation.y = rotationY;
             const frameDepth = 0.24; const sillHeight = 0.05;
@@ -527,7 +487,7 @@
             const frameRight = frameLeft.clone(); frameRight.position.set(0.65, sideY, 0); group.add(frameRight);
             const frameTop = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.095, frameDepth), lightFrameMat); frameTop.position.y = 2.25; group.add(frameTop);
             const doorPivot = new THREE.Group(); doorPivot.position.set(-0.6, 0, 0);
-            const door = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.2, 0.08), mat); door.position.set(0.6, 1.1, 0); 
+            const door = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.2, 0.08), mat.clone()); door.position.set(0.6, 1.1, 0); 
             const handle = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.03, 0.05), new THREE.MeshStandardMaterial({color: 0x555555})); handle.position.set(1.1, 1.0, 0.06); 
             doorPivot.add(door); doorPivot.add(handle); group.add(doorPivot);
             door.userData = { type: 'door', isOpen: false, pivot: doorPivot, openDir: openDir }; interactables.push(door); house.add(group);
@@ -570,6 +530,59 @@
         createCeilingLamp(5, -1.5, 'rect', 1.0, 'Living_Room'); 
         createCeilingLamp(0, 4.0, 'round', 0.6, 'Entrance');
 
+        function createWallAC(x, z, rotationY, roomId) {
+            const group = new THREE.Group(); group.position.set(x, 2.2, z); group.rotation.y = rotationY;
+            const ac = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.35, 0.25), acMat.clone()); group.add(ac);
+            const windGroup = new THREE.Group(); windGroup.position.set(0, -0.2, 0.1); windGroup.visible = false; 
+            const particleCount = 80; 
+            const windGeo = new THREE.BufferGeometry(); const posArray = new Float32Array(particleCount * 3);
+            for(let i=0; i<particleCount; i++) { 
+                posArray[i*3] = (Math.random()-0.5)*1.0; posArray[i*3+1] = -Math.random()*1.5; posArray[i*3+2] = Math.random()*0.5; 
+            }
+            windGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const windPoints = new THREE.Points(windGeo, new THREE.PointsMaterial({ color: 0x00ffff, size: 0.1, transparent: true, opacity: 0.4, map: windTexture, blending: THREE.AdditiveBlending, depthWrite: false }));
+            windGroup.add(windPoints); group.add(windGroup);
+            ac.userData = { type: 'ac', acType: 'wall', isOn: false, roomId: roomId, windGroup: windGroup, windPoints: windPoints, visualMesh: ac };
+            interactables.push(ac); house.add(group);
+        }
+
+        function createStandingAC(x, z, rotationY, roomId) {
+            const group = new THREE.Group(); group.position.set(x, 0, z); group.rotation.y = rotationY;
+            const ac = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.8, 0.45), acMat.clone()); ac.position.y = 0.9; group.add(ac);
+            const vent = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.6, 0.46), acVentMat); vent.position.set(0, 1.3, 0); group.add(vent);
+            const windGroup = new THREE.Group(); windGroup.position.set(0, 1.3, 0.25); windGroup.visible = false; 
+            const particleCount = 80; const windGeo = new THREE.BufferGeometry(); const posArray = new Float32Array(particleCount * 3);
+            for(let i=0; i<particleCount; i++) { 
+                posArray[i*3] = (Math.random()-0.5)*0.4; posArray[i*3+1] = (Math.random()-0.5)*0.6; posArray[i*3+2] = Math.random()*1.5; 
+            }
+            windGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const windPoints = new THREE.Points(windGeo, new THREE.PointsMaterial({ color: 0x00ffff, size: 0.08, transparent: true, opacity: 0.4, map: windTexture, blending: THREE.AdditiveBlending, depthWrite: false }));
+            windGroup.add(windPoints); group.add(windGroup);
+            const hitbox = new THREE.Mesh(new THREE.BoxGeometry(0.6, 2.0, 0.6), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })); hitbox.position.y = 1.0; 
+            hitbox.userData = { type: 'ac', acType: 'standing', isOn: false, roomId: roomId, windGroup: windGroup, windPoints: windPoints, visualMesh: ac };
+            group.add(hitbox); interactables.push(hitbox); house.add(group);
+        }
+
+        function createWallExhaustFan(x, y, z, rotationZ, roomId) {
+            const group = new THREE.Group(); group.position.set(x, y, z); group.rotation.z = rotationZ; 
+            const casing = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.22, 32, 1, true), new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.6, side: THREE.DoubleSide })); group.add(casing);
+            const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.1, 16), fanMat.clone()); group.add(motor);
+            const bladeGroup = new THREE.Group(); const bladeGeo = new THREE.BoxGeometry(0.7, 0.02, 0.1);
+            for(let i=0; i<3; i++) { const blade = new THREE.Mesh(bladeGeo, fanMat); blade.rotation.y = (i * Math.PI * 2) / 3; bladeGroup.add(blade); } group.add(bladeGroup);
+            const grillGeo = new THREE.TorusGeometry(0.38, 0.02, 8, 32);
+            const grill1 = new THREE.Mesh(grillGeo, casing.material); grill1.position.y = 0.1; grill1.rotation.x = Math.PI / 2; group.add(grill1);
+            const grill2 = new THREE.Mesh(grillGeo, casing.material); grill2.position.y = -0.1; grill2.rotation.x = Math.PI / 2; group.add(grill2);
+            const hitbox = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.3, 32), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+            hitbox.userData = { type: 'fan', isOn: false, roomId: roomId, bladeGroup: bladeGroup, visualMesh: motor };
+            group.add(hitbox); interactables.push(hitbox); house.add(group);
+        }
+
+        createWallAC(-8.9, -3, Math.PI/2, 'Bedroom_Bottom_Left');
+        createWallAC(-8.9, 3, Math.PI/2, 'Bedroom_Top_Left');
+        createWallAC(8.9, 3.5, -Math.PI/2, 'Bedroom_Top_Right');
+        createStandingAC(8.4, 0.4, -Math.PI * 3/4, 'Living_Room');
+        createWallExhaustFan(9, 2.0, -2, Math.PI / 2, 'Living_Room');
+
         const ambientLight = new THREE.AmbientLight(initialTheme.ambientColor, initialTheme.ambient); scene.add(ambientLight);
         const dirLight = new THREE.DirectionalLight(initialTheme.sun, 1.3); dirLight.position.set(6, 20, 4); scene.add(dirLight);
 
@@ -592,46 +605,21 @@
             document.getElementById(`theme-${type}`).classList.add('active');
         }
 
-        // [核心] 进入局部 3D 视图
         function enterLocal3D(room) {
-            currentMode = '3d'; 
-            document.getElementById('btn-3d').classList.add('active');
-            document.getElementById('btn-2d').classList.remove('active');
-            
-            controls.minPolarAngle = 0; 
-            controls.maxPolarAngle = Math.PI - 0.1; 
-            controls.enableRotate = true;
-
-            roomZones.forEach(z => z.visible = true); 
-
+            currentMode = '3d'; document.getElementById('btn-3d').classList.add('active'); document.getElementById('btn-2d').classList.remove('active');
+            controls.minPolarAngle = 0; controls.maxPolarAngle = Math.PI - 0.1; controls.enableRotate = true; roomZones.forEach(z => z.visible = true); 
             gsap.to(controls.target, { x: room.x, y: 0, z: room.z, duration: 1.6, ease: "power3.inOut" });
-
             const offset = new THREE.Vector3().subVectors(camera.position, controls.target);
-            offset.y = 0;
-            if (offset.lengthSq() < 0.001) offset.set(0, 0, 1);
-            offset.normalize();
-            offset.applyAxisAngle(new THREE.Vector3(0,1,0), Math.PI / 8); 
-
-            gsap.to(camera.position, { 
-                x: room.x + offset.x * 9,
-                y: 8,
-                z: room.z + offset.z * 9, 
-                duration: 1.6, 
-                ease: "power3.inOut"
-            });
-            
-            updateTip(`已进入 ${room.label} 3D视图，点击其他房间切换`);
-            currentFocusedRoom = room.name;
+            offset.y = 0; if (offset.lengthSq() < 0.001) offset.set(0, 0, 1); offset.normalize(); offset.applyAxisAngle(new THREE.Vector3(0,1,0), Math.PI / 8); 
+            gsap.to(camera.position, { x: room.x + offset.x * 9, y: 8, z: room.z + offset.z * 9, duration: 1.6, ease: "power3.inOut" });
+            updateTip(`已进入 ${room.label} 3D视图，点击其他房间切换`); currentFocusedRoom = room.name;
         }
 
         function zoomToRoom(room) {
-            currentFocusedRoom = room.name;
-            updateTip(`再次点击 ${room.label} 可进入3D视图`);
+            currentFocusedRoom = room.name; updateTip(`再次点击 ${room.label} 可进入3D视图`);
             gsap.to(controls.target, { x: room.x, y: 0, z: room.z, duration: 1.2, ease: "power2.inOut" });
-            const currentAngle = controls.getAzimuthalAngle();
-            const snapAngle = Math.round(currentAngle / (Math.PI / 2)) * (Math.PI / 2);
-            const offsetR = 0.01; const camX = room.x + Math.sin(snapAngle) * offsetR; const camZ = room.z + Math.cos(snapAngle) * offsetR;
-            gsap.to(camera.position, { x: camX, y: VIEW_HEIGHT_ZOOM, z: camZ, duration: 1.2, ease: "power2.inOut",
+            const currentAngle = controls.getAzimuthalAngle(); const snapAngle = Math.round(currentAngle / (Math.PI / 2)) * (Math.PI / 2);
+            const offsetR = 0.01; gsap.to(camera.position, { x: room.x + Math.sin(snapAngle)*offsetR, y: VIEW_HEIGHT_ZOOM, z: room.z + Math.cos(snapAngle)*offsetR, duration: 1.2, ease: "power2.inOut",
                 onComplete: () => { if (currentMode === '2d') { controls.minPolarAngle = 0; controls.maxPolarAngle = 0.2; } }
             });
         }
@@ -639,20 +627,15 @@
         function updateView(mode) {
             currentFocusedRoom = null;
             if (mode === '2d') {
-                currentMode = '2d';
-                document.getElementById('btn-2d').classList.add('active'); document.getElementById('btn-3d').classList.remove('active');
-                roomZones.forEach(z => z.visible = true);
-                controls.minPolarAngle = 0; controls.maxPolarAngle = 0.2; controls.enableRotate = true; 
+                currentMode = '2d'; document.getElementById('btn-2d').classList.add('active'); document.getElementById('btn-3d').classList.remove('active');
+                roomZones.forEach(z => z.visible = true); controls.minPolarAngle = 0; controls.maxPolarAngle = 0.2; controls.enableRotate = true; 
                 gsap.to(controls.target, { x: 0, y: 0, z: 0, duration: 1.2, ease: "power2.inOut" });
-                const angle = controls.getAzimuthalAngle(); const r = 0.1; 
-                const snapAngle = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
-                gsap.to(camera.position, { x: Math.sin(snapAngle) * r, y: VIEW_HEIGHT_GLOBAL, z: Math.cos(snapAngle) * r, duration: 1.2, ease: "power2.inOut"});
+                const angle = controls.getAzimuthalAngle(); const snapAngle = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
+                gsap.to(camera.position, { x: Math.sin(snapAngle) * 0.1, y: VIEW_HEIGHT_GLOBAL, z: Math.cos(snapAngle) * 0.1, duration: 1.2, ease: "power2.inOut"});
                 updateTip("2D模式：点击房间放大，再次点击进入3D");
             } else {
-                currentMode = '3d';
-                document.getElementById('btn-3d').classList.add('active'); document.getElementById('btn-2d').classList.remove('active');
-                roomZones.forEach(z => z.visible = true);
-                controls.minPolarAngle = 0; controls.maxPolarAngle = Math.PI/2 - 0.05; controls.enableRotate = true;
+                currentMode = '3d'; document.getElementById('btn-3d').classList.add('active'); document.getElementById('btn-2d').classList.remove('active');
+                roomZones.forEach(z => z.visible = true); controls.minPolarAngle = 0; controls.maxPolarAngle = Math.PI/2 - 0.05; controls.enableRotate = true;
                 gsap.to(controls.target, { x: 0, y: 0, z: 0, duration: 1.2, ease: "power2.inOut" });
                 gsap.to(camera.position, { x: 12, y: 14, z: 12, duration: 1.2, ease: "power2.inOut" });
                 updateTip("3D模式：点击房间直接漫游，拖动旋转");
@@ -665,31 +648,23 @@
         window.addEventListener('dblclick', (event) => {
             if (event.target.closest('.sidebar') || event.target.closest('.controls-panel')) return;
             const rect = renderer.domElement.getBoundingClientRect();
-            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1; pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
             raycaster.setFromCamera(pointer, camera);
             const hits = raycaster.intersectObjects([...interactables, ...roomZones]);
             if (hits.length === 0) updateView(currentMode);
         });
 
-        window.addEventListener('pointerdown', (event) => {
-             pointerDownX = event.clientX;
-             pointerDownY = event.clientY;
-        });
+        window.addEventListener('pointerdown', (event) => { pointerDownX = event.clientX; pointerDownY = event.clientY; });
 
         window.addEventListener('pointerup', (event) => {
-            const deltaX = Math.abs(event.clientX - pointerDownX);
-            const deltaY = Math.abs(event.clientY - pointerDownY);
-            if (deltaX > 5 || deltaY > 5) return;
-
+            if (Math.abs(event.clientX - pointerDownX) > 5 || Math.abs(event.clientY - pointerDownY) > 5) return;
             if (!event.target.closest('.controls-panel') && !event.target.closest('.sidebar') && !event.target.closest('.room-item')) hideControlsPanel();
             if (event.target.closest('.sidebar') || event.target.closest('.menu-btn') || event.target.closest('.theme-controls') || event.target.closest('.view-controls') || event.target.closest('.controls-panel')) return;
             
             const rect = renderer.domElement.getBoundingClientRect();
-            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
+            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1; pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
             raycaster.setFromCamera(pointer, camera);
+            
             const intersectsObj = raycaster.intersectObjects(interactables);
             if (intersectsObj.length > 0) {
                 const target = intersectsObj[0].object;
@@ -697,8 +672,8 @@
                     const data = target.userData; data.isOpen = !data.isOpen;
                     const angle = data.openDir * Math.PI / 2;
                     gsap.to(data.pivot.rotation, { y: data.isOpen ? angle : 0, duration: 1.0, ease: "power2.inOut" });
-                } else if (target.userData.type === 'lamp') {
-                    toggleLampState(target, null, true);
+                } else if (['lamp', 'ac', 'fan'].includes(target.userData.type)) {
+                    toggleDeviceState(target, null, true);
                 }
                 return; 
             }
@@ -706,47 +681,42 @@
             const intersectsRoom = raycaster.intersectObjects(roomZones);
             if (intersectsRoom.length > 0) {
                 const roomData = intersectsRoom[0].object.userData.roomData;
-                
                 if (currentMode === '2d') {
-                    if (currentFocusedRoom === roomData.name) {
-                        enterLocal3D(roomData);
-                    } else {
-                        zoomToRoom(roomData);
-                        showControlsPanel(roomData.name, roomData.label);
-                    }
+                    if (currentFocusedRoom === roomData.name) { enterLocal3D(roomData); } 
+                    else { zoomToRoom(roomData); showControlsPanel(roomData.name, roomData.label); }
                 } else {
-                    // 3D 模式 (全局或局部)：直接进局部 3D
-                    enterLocal3D(roomData);
-                    showControlsPanel(roomData.name, roomData.label);
+                    enterLocal3D(roomData); showControlsPanel(roomData.name, roomData.label);
                 }
             }
         });
 
         window.addEventListener('pointermove', (event) => {
             const rect = renderer.domElement.getBoundingClientRect();
-            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1; pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
             raycaster.setFromCamera(pointer, camera);
             
-            let hit = false;
-            let tooltipText = "";
-
+            let hit = false; let tooltipText = "";
             const objHits = raycaster.intersectObjects(interactables);
+            
             if (objHits.length > 0) {
-                hit = true;
-                const obj = objHits[0].object;
-                if (hoveredObject && hoveredObject !== obj) {
-                    if (hoveredObject.material.emissive) hoveredObject.material.emissive.setHex(0x000000); 
+                hit = true; const obj = objHits[0].object;
+                if (hoveredObject && hoveredObject !== obj && hoveredObject.userData && hoveredObject.userData.visualMesh) {
+                    const oldVMesh = hoveredObject.userData.visualMesh || hoveredObject;
+                    if (!hoveredObject.userData.isOn && oldVMesh.material.emissive) oldVMesh.material.emissive.setHex(0x000000); 
                 }
-                hoveredObject = obj;
-                if (obj.userData.type === 'door') tooltipText = obj.userData.isOpen ? "点击关门" : "点击开门";
-                else if (obj.userData.type === 'lamp') {
-                    tooltipText = obj.userData.isOn ? "点击关灯" : "点击开灯";
-                    if (!obj.userData.isOn) obj.material.emissive.setHex(0x333333); 
-                }
+                hoveredObject = obj; const ud = obj.userData;
+                
+                if (ud.type === 'door') tooltipText = ud.isOpen ? "点击关门" : "点击开门";
+                else if (ud.type === 'lamp') tooltipText = ud.isOn ? "点击关灯" : "点击开灯";
+                else if (ud.type === 'ac') tooltipText = ud.isOn ? "点击关空调" : "点击开空调";
+                else if (ud.type === 'fan') tooltipText = ud.isOn ? "点击关排气扇" : "点击开排气扇";
+                
+                const targetMesh = ud.visualMesh || obj;
+                if (targetMesh.material && targetMesh.material.emissive && !ud.isOn) { targetMesh.material.emissive.setHex(0x333333); }
             } else {
                 if (hoveredObject) {
-                    if (hoveredObject.userData.type === 'lamp' && !hoveredObject.userData.isOn) hoveredObject.material.emissive.setHex(0x000000);
+                    const ud = hoveredObject.userData; const targetMesh = ud.visualMesh || hoveredObject;
+                    if (targetMesh.material && targetMesh.material.emissive && !ud.isOn) { targetMesh.material.emissive.setHex(0x000000); }
                     hoveredObject = null;
                 }
             }
@@ -754,57 +724,64 @@
             if (!hit) {
                 const roomHits = raycaster.intersectObjects(roomZones);
                 if (roomHits.length > 0) {
-                    hit = true;
-                    const room = roomHits[0].object;
-                    room.material.opacity = 0.2; 
-                    
+                    hit = true; const room = roomHits[0].object; room.material.opacity = 0.2; 
                     const rName = room.userData.roomData.label;
                     if (currentMode === '2d') {
-                        if (currentFocusedRoom === room.userData.roomData.name) {
-                            tooltipText = `再次点击进入 ${rName} 3D视图`;
-                        } else {
-                            tooltipText = `点击放大 ${rName}`;
-                        }
-                    } else {
-                        tooltipText = `点击进入 ${rName} 视图`;
-                    }
-                    
+                        tooltipText = (currentFocusedRoom === room.userData.roomData.name) ? `再次点击进入 ${rName} 3D视图` : `点击放大 ${rName}`;
+                    } else { tooltipText = `点击进入 ${rName} 视图`; }
                     roomZones.forEach(r => { if(r !== room) r.material.opacity = 0.0; });
-                } else {
-                    roomZones.forEach(r => r.material.opacity = 0.0);
-                }
+                } else { roomZones.forEach(r => r.material.opacity = 0.0); }
             }
-
             document.body.style.cursor = hit ? 'pointer' : 'default';
-            if (tooltipText) updateTip(tooltipText);
+            updateTip(tooltipText);
         });
-
-        // [修复] 设置初始激活的按钮状态
-        document.getElementById('theme-dawn').classList.add('active');
 
         document.getElementById('theme-night').addEventListener('click', () => switchTheme('night'));
         document.getElementById('theme-dawn').addEventListener('click', () => switchTheme('dawn'));
         document.getElementById('theme-dusk').addEventListener('click', () => switchTheme('dusk'));
-        document.getElementById('btn-2d').addEventListener('click', (e) => updateView('2d'));
-        document.getElementById('btn-3d').addEventListener('click', (e) => updateView('3d'));
+        document.getElementById('btn-2d').addEventListener('click', () => updateView('2d'));
+        document.getElementById('btn-3d').addEventListener('click', () => updateView('3d'));
 
         function resizeRenderer() {
-            const w = mainWrapper.clientWidth;
-            const h = mainWrapper.clientHeight;
-            camera.aspect = w / h;
-            camera.updateProjectionMatrix();
-            renderer.setSize(w, h);
+            camera.aspect = ui.mainWrapper.clientWidth / ui.mainWrapper.clientHeight;
+            camera.updateProjectionMatrix(); renderer.setSize(ui.mainWrapper.clientWidth, ui.mainWrapper.clientHeight);
         }
         window.addEventListener('resize', resizeRenderer);
-        mainWrapper.addEventListener('transitionend', resizeRenderer);
+        ui.mainWrapper.addEventListener('transitionend', resizeRenderer);
         
         function animate() {
             requestAnimationFrame(animate);
-            if (renderer.domElement.width !== mainWrapper.clientWidth || renderer.domElement.height !== mainWrapper.clientHeight) {
-                resizeRenderer();
-            }
-            controls.update();
-            renderer.render(scene, camera);
+            
+            interactables.forEach(obj => {
+                const ud = obj.userData;
+                if (ud.type === 'fan' && ud.isOn) {
+                    ud.bladeGroup.rotation.y -= 0.3; 
+                } else if (ud.type === 'ac' && ud.isOn) {
+                    const positions = ud.windPoints.geometry.attributes.position.array;
+                    for(let i=0; i<positions.length; i+=3) {
+                        if (ud.acType === 'standing') {
+                            positions[i+2] += 0.03; 
+                            if (positions[i+2] > 1.5) { 
+                                positions[i+2] = 0.1; 
+                                positions[i] = (Math.random() - 0.5) * 0.3; 
+                                positions[i+1] = (Math.random() - 0.5) * 0.5; 
+                            }
+                        } else {
+                            positions[i+1] -= 0.02; 
+                            positions[i+2] += 0.01; 
+                            if (positions[i+1] < -1.5) { 
+                                positions[i+1] = 0; 
+                                positions[i+2] = Math.random() * 0.2; 
+                                positions[i] = (Math.random() - 0.5) * 1.0;
+                            }
+                        }
+                    }
+                    ud.windPoints.geometry.attributes.position.needsUpdate = true;
+                }
+            });
+
+            if (renderer.domElement.width !== ui.mainWrapper.clientWidth || renderer.domElement.height !== ui.mainWrapper.clientHeight) resizeRenderer();
+            controls.update(); renderer.render(scene, camera);
         }
 
         initMQTT();
