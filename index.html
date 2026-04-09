@@ -88,6 +88,10 @@
         .view-btn.active { background: #718093; color: #fff; box-shadow: 0 4px 12px rgba(113, 128, 147, 0.3); }
         .tip { position: absolute; top: 30px; left: 50%; transform: translateX(-50%) translateY(-10px); color: #505050; background: rgba(255,255,255,0.85); padding: 8px 24px; border-radius: 30px; font-size: 13px; font-weight: 600; backdrop-filter: blur(10px); pointer-events: none; box-shadow: 0 8px 20px rgba(0,0,0,0.08); z-index: 5; min-width: 180px; text-align: center; opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease; }
         .tip.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+        /* 紧急警报样式 */
+        .tip.emergency { background: #ff3b30; color: #fff; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.05); } 100% { transform: translateX(-50%) scale(1); } }
+
         #mqtt-status { position: fixed; bottom: 10px; right: 10px; font-size: 10px; color: #aaa; z-index: 200; pointer-events: none; transition: color 0.3s; }
         #mqtt-status.connected { color: #4cd964; }
     </style>
@@ -96,11 +100,13 @@
 
     <div class="sidebar" id="sidebar">
         <div class="sb-section">
-            <h3>Environment</h3>
+            <h3>环境数据</h3>
             <div class="stats-grid">
-                <div class="stat-card"><span class="stat-value" id="val-temp">26.0°</span><span class="stat-label">Temp</span></div>
-                <div class="stat-card"><span class="stat-value" id="val-humi">60.0%</span><span class="stat-label">Humidity</span></div>
-                <div class="stat-card full-width"><span class="stat-value" id="val-smoke" style="color: #4cd964; font-size: 18px;">安全</span><span class="stat-label">Smoke Status</span></div>
+                <div class="stat-card"><span class="stat-value" id="val-temp">26.0°</span><span class="stat-label">温度</span></div>
+                <div class="stat-card"><span class="stat-value" id="val-humi">60.0%</span><span class="stat-label">湿度</span></div>
+                <div class="stat-card"><span class="stat-value" id="val-lux">0lx</span><span class="stat-label">光照强度</span></div>
+                <div class="stat-card"><span class="stat-value" id="val-smoke" style="color: #4cd964; font-size: 14px;">安全</span><span class="stat-label">烟雾状态</span></div>
+                <div class="stat-card full-width"><span class="stat-value" id="val-fire" style="color: #4cd964; font-size: 18px;">正常</span><span class="stat-label">火警状态</span></div>
             </div>
         </div>
         <div class="sb-section">
@@ -145,9 +151,7 @@
         const IOT_CONFIG = {
             productKey: "hbqr9g5E5SA",
             deviceName: "Monitor",
-            // 浏览器环境必须使用 WSS (443端口)
             host: "wss://iot-06z00jbvofuz12n.mqtt.iothub.aliyuncs.com:443/mqtt",
-            // 静态参数
             clientId: "hbqr9g5E5SA.Monitor|securemode=2,signmethod=hmacsha256,timestamp=1774954171490|",
             username: "Monitor&hbqr9g5E5SA",
             password: "3d71a698d1742216856484880ba176c80599edcd835a85c4ba842dca0fb0ae99",
@@ -179,6 +183,8 @@
         let pointerDownX = 0; let pointerDownY = 0;
         let mqttClient = null;
         let fetchInterval = null; 
+        let currentSmokeStatus = 0; // 记录烟雾状态
+        let currentFireAlarm = 0;   // 记录火警状态
 
         // --- 动态生成柔和风粒子贴图 ---
         function createWindTexture() {
@@ -205,12 +211,23 @@
             valTemp: document.getElementById('val-temp'),
             valHumi: document.getElementById('val-humi'),
             valSmoke: document.getElementById('val-smoke'),
+            valLux: document.getElementById('val-lux'),     
+            valFire: document.getElementById('val-fire'),   
             roomListUl: document.getElementById('room-list-ul')
         };
 
-        function updateTip(text) { 
-            if (text && text.length > 0) { ui.statusTip.innerText = text; ui.statusTip.classList.add('visible'); } 
-            else { ui.statusTip.classList.remove('visible'); }
+        function updateTip(text, isEmergency = false) { 
+            if (text && text.length > 0) { 
+                ui.statusTip.innerText = text; 
+                ui.statusTip.classList.add('visible'); 
+                if(isEmergency) ui.statusTip.classList.add('emergency');
+                else ui.statusTip.classList.remove('emergency');
+            } 
+            else { 
+                // 如果处于紧急状态，不允许自动隐藏 Tip
+                if(currentSmokeStatus === 2 || currentFireAlarm === 1) return;
+                ui.statusTip.classList.remove('visible'); 
+            }
         }
         function bindUITip(elementId, text) {
             const el = document.getElementById(elementId);
@@ -222,10 +239,13 @@
         function resetSensorUI() {
             if (ui.valTemp) ui.valTemp.innerText = "26.0°";
             if (ui.valHumi) ui.valHumi.innerText = "60.0%";
+            if (ui.valLux) ui.valLux.innerText = "0lx";
+            if (ui.valFire) { ui.valFire.innerText = "正常"; ui.valFire.style.color = "#4cd964"; }
             if (ui.valSmoke) {
                 ui.valSmoke.innerText = "安全";
                 ui.valSmoke.style.color = "#4cd964";
             }
+            ui.statusTip.classList.remove('emergency');
             ui.mqttStatusDiv.classList.remove('connected');
         }
 
@@ -324,7 +344,7 @@
 
         function requestCloudData() {
             if (mqttClient && mqttClient.connected) {
-                const keysToFetch = ["temperature", "Humidity", "SmokeStatus"];
+                const keysToFetch = ["temperature", "Humidity", "SmokeStatus", "LightLux", "FireAlarm"];
                 for (const rId in DEVICE_PROP_MAP) {
                     for (const type in DEVICE_PROP_MAP[rId]) {
                         keysToFetch.push(DEVICE_PROP_MAP[rId][type]);
@@ -357,13 +377,38 @@
                 }
             }
             
+            // 环境数据更新
             if (params.temperature !== undefined) ui.valTemp.innerText = parseFloat(params.temperature).toFixed(1) + "°";
             if (params.Humidity !== undefined) ui.valHumi.innerText = parseFloat(params.Humidity).toFixed(1) + "%";
+            if (params.LightLux !== undefined) ui.valLux.innerText = params.LightLux + "lx";
+            
+            // 火警报警逻辑：FireAlarm == 1 触发报警
+            if (params.FireAlarm !== undefined) {
+                currentFireAlarm = (params.FireAlarm === 1 || params.FireAlarm === true) ? 1 : 0;
+                ui.valFire.innerText = (currentFireAlarm === 1) ? "🔥 火警报警！" : "正常";
+                ui.valFire.style.color = (currentFireAlarm === 1) ? "#ff3b30" : "#4cd964";
+            }
+
+            // 烟雾报警逻辑：SmokeStatus 0安全, 1超标, 2危险报警
             if (params.SmokeStatus !== undefined) {
-                const smokeMap = { 0: { text: "安全", color: "#4cd964" }, 1: { text: "超标", color: "#ff9800" }, 2: { text: "危险", color: "#ff3b30" } };
-                const status = smokeMap[params.SmokeStatus] || smokeMap[0];
+                currentSmokeStatus = params.SmokeStatus;
+                const smokeMap = { 
+                    0: { text: "安全", color: "#4cd964" }, 
+                    1: { text: "浓度超标", color: "#ff9800" }, 
+                    2: { text: "🚨 危险报警！", color: "#ff3b30" } 
+                };
+                const status = smokeMap[currentSmokeStatus] || smokeMap[0];
                 ui.valSmoke.innerText = status.text;
                 ui.valSmoke.style.color = status.color;
+            }
+
+            // 全局警报判断：火警为1 或 烟雾为2
+            if (currentFireAlarm === 1 || currentSmokeStatus === 2) {
+                let msg = (currentFireAlarm === 1) ? "检测到火情！" : "烟雾浓度极高！";
+                updateTip("⚠️ 紧急情况：" + msg + "请立即处理！", true);
+            } else {
+                // 如果报警解除，取消 Tip 的紧急状态
+                ui.statusTip.classList.remove('emergency');
             }
         }
 
